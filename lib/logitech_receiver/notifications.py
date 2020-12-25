@@ -327,7 +327,7 @@ def _process_feature_notification(device, status, n, feature):
                 # as we want to notify when a device changes to this host
                 # but the only indication we get is this notification
                 alert = _ALERT.NOTIFICATION if _F.CHANGE_HOST in device.features else _ALERT.NONE
-                status.changed(active=True, alert=alert, reason=reason)
+                status.changed(active=True, alert=alert, reason=reason, requested_push=True)
             else:
                 _log.warn('%s: unknown WIRELESS %s', device, n)
         else:

@@ -63,6 +63,9 @@ _BATTERY_ATTENTION_LEVEL = 5
 # _STATUS_TIMEOUT = 5 * 60  # seconds
 _LONG_SLEEP = 15 * 60  # seconds
 
+# Minimum interval before reconfiguration when the device is already active
+_MIN_RECONFIG_INTERVAL = 2
+
 #
 #
 #
@@ -153,6 +156,9 @@ class DeviceStatus(dict):
 
         # timestamp of when this status object was last updated
         self.updated = 0
+
+        # timestamp of the last time settings were pushed to the device
+        self._last_push = 0
 
     def to_string(self):
         def _items():
@@ -277,7 +283,7 @@ class DeviceStatus(dict):
             self[KEYS.BATTERY_VOLTAGE] = None
             self.changed()
 
-    def changed(self, active=None, alert=ALERT.NONE, reason=None, timestamp=None):
+    def changed(self, active=None, alert=ALERT.NONE, reason=None, timestamp=None, requested_push=False):
         assert self._changed_callback
         d = self._device
         # assert d  # may be invalid when processing the 'unpaired' notification
@@ -302,15 +308,24 @@ class DeviceStatus(dict):
                         self[KEYS.BATTERY_CHARGING] = None
                         self[KEYS.BATTERY_VOLTAGE] = None
 
+                    # battery information may have changed so try to read it now
+                    self.read_battery(timestamp)
+
+                if not was_active or (requested_push and timestamp - self._last_push > _MIN_RECONFIG_INTERVAL):
                     # Devices lose configuration when they are turned off,
                     # make sure they're up-to-date.
                     if _log.isEnabledFor(_INFO):
+                        if was_active:
+                            # Device requested reconfiguration despite being already active.
+                            # In this case, we only push settings if this hasn't been done
+                            # in the last couple of seconds, otherwise settings would be pushed twice
+                            # when the device is powered on.
+                            _log.info('%s was already active but requested reconfiguration', d)
                         _log.info('%s pushing device settings %s', d, d.settings)
+                    self._last_push = timestamp
                     for s in d.settings:
                         s.apply()
 
-                    # battery information may have changed so try to read it now
-                    self.read_battery(timestamp)
             else:
                 if was_active:
                     battery = self.get(KEYS.BATTERY_LEVEL)
